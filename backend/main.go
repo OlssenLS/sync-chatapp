@@ -1,43 +1,31 @@
 package main
 
 import (
-    "fmt"
-    "net/http"
-    "github.com/gorilla/websocket"
+	"log"
+	"net/http"
+
+	"github.com/OlssenLS/sync-chatapp/backend/db"
+	"github.com/OlssenLS/sync-chatapp/backend/routes"
+	"github.com/gin-gonic/gin"
 )
 
-var upgrader = websocket.Upgrader{
-    CheckOrigin: func(r *http.Request) bool {
-        return true
-    },
-}
-
-func handleConnections(w http.ResponseWriter, r *http.Request) {
-    ws, err := upgrader.Upgrade(w, r, nil)
-    if err != nil {
-        fmt.Println("Error upgrading:", err)
-        return
-    }
-    defer ws.Close()
-
-    fmt.Println("Client connected!")
-
-    for {
-        messageType, p, err := ws.ReadMessage()
-        if err != nil {
-            fmt.Println("Error reading:", err)
-            break
-        }
-        fmt.Println("Received: %s\n", p)
-        if err := ws.WriteMessage(messageType, p); err != nil {
-            fmt.Println("Error writing:", err)
-            break
-        }
-    }
-}
-
 func main() {
-    http.HandleFunc("/ws", handleConnections)
-    fmt.Println("Chat server started on :8080")
-    http.ListenAndServe(":8080", nil)
+	// Initialize MongoDB
+	db.ConnectDB()
+
+	// Initialize Gin router
+	r := gin.Default()
+
+	// Register Routes
+	routes.RegisterAuthRoutes(r)
+
+	// Health check
+	r.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "pong"})
+	})
+
+	log.Println("Server starting on :8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("Failed to run server: %v", err)
+	}
 }
