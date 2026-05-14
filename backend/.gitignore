@@ -1,3 +1,4 @@
 startup.log
 main.exe
 go.sum
+.env
