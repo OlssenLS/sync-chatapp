@@ -7,9 +7,15 @@ import (
 	"github.com/OlssenLS/sync-chatapp/backend/db"
 	"github.com/OlssenLS/sync-chatapp/backend/routes"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
+
 	// Initialize MongoDB
 	db.ConnectDB()
 
