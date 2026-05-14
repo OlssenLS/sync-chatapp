@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'onboarding_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
+import 'home_screen.dart';
 
 void main() {
   runApp(const SyncChatApp());
@@ -29,6 +30,11 @@ class SyncChatApp extends StatelessWidget {
           backgroundColor: Colors.white,
           elevation: 0,
           iconTheme: IconThemeData(color: Colors.black87),
+          titleTextStyle: TextStyle(
+            color: Colors.black87,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
       initialRoute: '/onboarding',
@@ -36,6 +42,7 @@ class SyncChatApp extends StatelessWidget {
         '/onboarding': (context) => const OnboardingScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
+        '/home': (context) => const HomeScreen(),
       },
     );
   }

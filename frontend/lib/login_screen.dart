@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Login Successful!"), backgroundColor: Colors.green),
           );
-          // TODO: Navigate to Home
+          Navigator.pushReplacementNamed(context, '/home');
         }
       } else {
         _shake();
