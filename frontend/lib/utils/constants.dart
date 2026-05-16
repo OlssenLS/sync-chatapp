@@ -1,6 +1,5 @@
 class Constants {
-  // TODO: Replace with  actual Render URL after deployment
-  static const String serverDomain = "RENDER_URL.onrender.com";
+  static const String serverDomain = "sync-chatapp-production.up.railway.app";
 
   // Base URLs
   static const String apiBaseUrl = "https://$serverDomain";
