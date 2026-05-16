@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'services/chat_service.dart';
+import 'services/websocket_service.dart';
+import 'services/auth_service.dart';
 import 'chat_detail_screen.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -13,6 +17,76 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   int _tabIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  final WebSocketService _wsService = WebSocketService();
+  StreamSubscription? _wsSubscription;
+  
+  String _myId = ""; 
+  List<dynamic> _conversations = [];
+  List<dynamic> _searchResults = [];
+  bool _isSearching = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeUser();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _initializeUser() async {
+    final id = await AuthService.getUserId();
+    if (id != null) {
+      setState(() {
+        _myId = id;
+      });
+      _wsService.connect(id);
+      _fetchConversations();
+
+      // Listen for WebSocket messages to update the chat list in real-time
+      _wsSubscription = _wsService.messages.listen((data) {
+        if (data['type'] == 'chat') {
+          _fetchConversations();
+        }
+      });
+    }
+  }
+
+  void _fetchConversations() async {
+    if (_myId.isEmpty) return;
+    final conversations = await ChatService.getActiveConversations(_myId);
+    if (mounted) {
+      setState(() {
+        _conversations = conversations;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _onSearchChanged() async {
+    if (_searchController.text.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() => _isSearching = true);
+    final results = await ChatService.searchUsers(_searchController.text);
+    if (mounted) {
+      setState(() {
+        _searchResults = results;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _wsSubscription?.cancel();
+    _wsService.disconnect();
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,20 +100,13 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildHeader(),
                 _buildTabSection(),
-                const SizedBox(height: 10), // Added bottom margin to the tab pill
+                const SizedBox(height: 10),
                 Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 120), // Space for floating nav
-                    itemCount: 15,
-                    separatorBuilder: (context, index) => const Divider(
-                      indent: 85,
-                      height: 1,
-                      color: Color(0xFFF0F2F5),
-                    ),
-                    itemBuilder: (context, index) {
-                      return _buildChatTile(index);
-                    },
-                  ),
+                  child: _isSearching 
+                    ? _buildSearchResults() 
+                    : _isLoading 
+                      ? const Center(child: CircularProgressIndicator())
+                      : _buildChatList(),
                 ),
               ],
             ),
@@ -56,10 +123,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 "SYNC",
                 style: TextStyle(
                   fontSize: 28,
@@ -68,10 +135,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Color(0xFF24A1DE),
                 ),
               ),
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Color(0xFFF0F2F5),
-                child: Icon(Icons.person_outline, color: Colors.black54),
+              GestureDetector(
+                onTap: () async {
+                  await AuthService.logout();
+                  if (mounted) Navigator.pushReplacementNamed(context, '/login');
+                },
+                child: const CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Color(0xFFF0F2F5),
+                  child: Icon(Icons.logout, color: Colors.black54, size: 18),
+                ),
               ),
             ],
           ),
@@ -108,10 +181,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          double tabWidth = (constraints.maxWidth) / 2; // Subtracting padding
+          double tabWidth = (constraints.maxWidth) / 2;
           return Stack(
             children: [
-              // Sliding background decoration
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
@@ -177,72 +249,127 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildChatTile(int index) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      leading: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          color: const Color(0xFF24A1DE).withValues(alpha: 0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: Text(
-            "U${index + 1}",
-            style: const TextStyle(
-              color: Color(0xFF24A1DE),
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
+  Widget _buildChatList() {
+    if (_conversations.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 80, color: Colors.grey.shade300),
+            const SizedBox(height: 20),
+            const Text(
+              "No chats yet",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black54),
             ),
-          ),
-        ),
-      ),
-      title: Text(
-        "User ${index + 1}",
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 16,
-        ),
-      ),
-      subtitle: const Text(
-        "This is a message preview...",
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: Colors.black54),
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          const Text(
-            "12:45 PM",
-            style: TextStyle(color: Colors.black38, fontSize: 12),
-          ),
-          const SizedBox(height: 5),
-          if (index % 3 == 0)
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: Color(0xFF24A1DE),
-                shape: BoxShape.circle,
-              ),
-              child: const Text(
-                "2",
-                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-              ),
+            const SizedBox(height: 10),
+            const Text(
+              "Search users to start messaging!",
+              style: TextStyle(color: Colors.black38),
             ),
-        ],
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 120),
+      itemCount: _conversations.length,
+      separatorBuilder: (context, index) => const Divider(
+        indent: 85,
+        height: 1,
+        color: Color(0xFFF0F2F5),
       ),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatDetailScreen(userName: "User ${index + 1}"),
+      itemBuilder: (context, index) {
+        final conv = _conversations[index];
+        final username = conv['other_username']?.toString() ?? "Unknown";
+        final firstLetter = username.isNotEmpty ? username[0].toUpperCase() : "?";
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          leading: CircleAvatar(
+            radius: 28,
+            backgroundColor: const Color(0xFF24A1DE).withValues(alpha: 0.1),
+            child: Text(firstLetter, style: const TextStyle(color: Color(0xFF24A1DE))),
           ),
+          title: Text(username, style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text(conv['last_message']?.toString() ?? "", maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: Text(_formatTime(conv['timestamp'])),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatDetailScreen(
+                  userName: username,
+                  userId: conv['other_user_id'],
+                  myId: _myId,
+                  wsService: _wsService,
+                ),
+              ),
+            ).then((_) => _fetchConversations());
+          },
         );
       },
     );
+  }
+
+  Widget _buildSearchResults() {
+    if (_searchResults.isEmpty) {
+      return const Center(child: Text("No users found"));
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 120),
+      itemCount: _searchResults.length,
+      separatorBuilder: (context, index) => const Divider(
+        indent: 85,
+        height: 1,
+        color: Color(0xFFF0F2F5),
+      ),
+      itemBuilder: (context, index) {
+        final user = _searchResults[index];
+        if (user['id'] == _myId) return const SizedBox.shrink();
+
+        final username = user['username']?.toString() ?? "Unknown";
+        final firstLetter = username.isNotEmpty ? username[0].toUpperCase() : "?";
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          leading: CircleAvatar(
+            radius: 28,
+            backgroundColor: const Color(0xFF24A1DE).withValues(alpha: 0.1),
+            child: Text(firstLetter, style: const TextStyle(color: Color(0xFF24A1DE))),
+          ),
+          title: Text(username, style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text(user['email']?.toString() ?? "", style: const TextStyle(color: Colors.black45)),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatDetailScreen(
+                  userName: username,
+                  userId: user['id'],
+                  myId: _myId,
+                  wsService: _wsService,
+                ),
+              ),
+            ).then((_) {
+               _searchController.clear();
+               _fetchConversations();
+            });
+          },
+        );
+      },
+    );
+  }
+
+  String _formatTime(dynamic timestamp) {
+    if (timestamp == null) return "";
+    try {
+      final dt = DateTime.parse(timestamp.toString()).toLocal();
+      return "${dt.hour}:${dt.minute.toString().padLeft(2, '0')}";
+    } catch (e) {
+      return "";
+    }
   }
 
   Widget _buildFloatingNavBar() {
@@ -295,31 +422,36 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF24A1DE).withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(30),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              color: isSelected ? const Color(0xFF24A1DE) : Colors.black38,
-              size: 24,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      child: AnimatedScale(
+        scale: isSelected ? 1.05 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutBack,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF24A1DE).withValues(alpha: 0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(30),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isSelected ? activeIcon : inactiveIcon,
                 color: isSelected ? const Color(0xFF24A1DE) : Colors.black38,
+                size: 24,
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? const Color(0xFF24A1DE) : Colors.black38,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

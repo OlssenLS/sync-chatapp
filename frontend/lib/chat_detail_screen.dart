@@ -1,8 +1,22 @@
+import 'dart:async';
+import 'dart:developer';
 import 'package:flutter/material.dart';
+import 'services/websocket_service.dart';
+import 'services/chat_service.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String userName;
-  const ChatDetailScreen({super.key, required this.userName});
+  final String userId;
+  final String myId;
+  final WebSocketService wsService;
+
+  const ChatDetailScreen({
+    super.key,
+    required this.userName,
+    required this.userId,
+    required this.myId,
+    required this.wsService,
+  });
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
@@ -12,15 +26,90 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
-  
-  final List<ChatMessage> _messages = [
-    ChatMessage(content: "Hey there!", isMe: false, time: "10:00 AM"),
-    ChatMessage(content: "How's the new SYNC app?", isMe: false, time: "10:01 AM"),
-    ChatMessage(content: "It's looking amazing! Just added the glass effects.", isMe: true, time: "10:05 AM"),
-  ];
+  final List<ChatMessage> _messages = [];
+  StreamSubscription? _wsSubscription;
+
+  void _loadHistory() async {
+    log("Loading history for receiver: ${widget.userId}");
+    if (widget.userId.isEmpty) {
+       log("Error: receiver_id is empty!");
+       return;
+    }
+
+    final history = await ChatService.getChatHistory(widget.myId, widget.userId);
+    if (mounted) {
+      // CLEAR and RE-POPULATE properly for AnimatedList
+      setState(() {
+        _messages.clear();
+      });
+
+      for (int i = 0; i < history.length; i++) {
+        final msg = history[i];
+        final content = msg['content']?.toString() ?? "";
+        if (content.isNotEmpty) {
+          final newMessage = ChatMessage(
+            content: content,
+            isMe: msg['sender_id'] == widget.myId,
+            time: _formatTimestamp(msg['timestamp']),
+          );
+          
+          _messages.add(newMessage);
+          _listKey.currentState?.insertItem(_messages.length - 1, duration: Duration.zero);
+        }
+      }
+
+      // Delay auto-scroll to allow build to finish
+      Future.delayed(const Duration(milliseconds: 500), _scrollToBottom);
+    }
+  }
+
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return "12:00 PM";
+    try {
+      final dt = DateTime.parse(timestamp.toString()).toLocal();
+      return "${dt.hour % 12 == 0 ? 12 : dt.hour % 12}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}";
+    } catch (e) {
+      return "12:00 PM";
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+    
+    // Listen for real-time messages
+    _wsSubscription = widget.wsService.messages.listen((data) {
+      if (data['type'] == 'chat' && 
+          (data['sender_id'] == widget.userId || data['sender_id'] == widget.myId)) {
+        
+        final content = data['content']?.toString() ?? "";
+        if (content.isEmpty) return;
+
+        final isMe = data['sender_id'] == widget.myId;
+        final newMessage = ChatMessage(
+          content: content,
+          isMe: isMe,
+          time: TimeOfDay.now().format(context),
+        );
+
+        if (mounted) {
+          // Use a safer insertion pattern to avoid RangeError
+          final insertIndex = _messages.length;
+          setState(() {
+            _messages.add(newMessage);
+          });
+          _listKey.currentState?.insertItem(insertIndex, duration: const Duration(milliseconds: 350));
+          
+          Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _wsSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -37,38 +126,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
     
-    final newMessage = ChatMessage(
-      content: _messageController.text.trim(),
-      isMe: true,
-      time: TimeOfDay.now().format(context),
-    );
-
-    setState(() {
-      _messages.add(newMessage);
-      _listKey.currentState?.insertItem(_messages.length - 1, duration: const Duration(milliseconds: 350));
-      _messageController.clear();
-    });
-
-    // Auto-scroll after a short delay to allow the animation to start
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
-
-    // Simulate receiving a message
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        final reply = ChatMessage(
-          content: "That sounds awesome! 🚀",
-          isMe: false,
-          time: TimeOfDay.now().format(context),
-        );
-        setState(() {
-          _messages.add(reply);
-          _listKey.currentState?.insertItem(_messages.length - 1, duration: const Duration(milliseconds: 350));
-        });
-        Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
-      }
-    });
+    widget.wsService.sendMessage(widget.userId, text);
+    _messageController.clear();
   }
 
   @override
@@ -85,6 +147,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               padding: const EdgeInsets.all(20),
               initialItemCount: _messages.length,
               itemBuilder: (context, index, animation) {
+                // Safeguard against index out of bounds during list updates
+                if (index >= _messages.length) return const SizedBox.shrink();
                 return _buildAnimatedMessageBubble(_messages[index], animation);
               },
             ),
@@ -96,6 +160,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   PreferredSizeWidget _buildAppBar() {
+    final String displayTitle = widget.userName.trim().isNotEmpty ? widget.userName : "User";
+    final String initial = displayTitle[0].toUpperCase();
+
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -109,7 +176,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             radius: 18,
             backgroundColor: const Color(0xFF24A1DE).withValues(alpha: 0.1),
             child: Text(
-              widget.userName[0],
+              initial,
               style: const TextStyle(color: Color(0xFF24A1DE), fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ),
@@ -118,7 +185,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.userName,
+                displayTitle,
                 style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const Text(
@@ -197,19 +264,19 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       ),
       child: SafeArea(
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center, // Vertically center all items
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             IconButton(
               icon: const Icon(Icons.add, color: Color(0xFF24A1DE), size: 26),
               onPressed: () {},
-              constraints: const BoxConstraints(), // Remove default button constraints
+              constraints: const BoxConstraints(),
               padding: const EdgeInsets.all(8),
             ),
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF0F0F5),
+                  color: const Color(0xFFF0F2F5),
                   borderRadius: BorderRadius.circular(25),
                 ),
                 child: TextField(
@@ -218,13 +285,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   minLines: 1,
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
-                  textAlignVertical: TextAlignVertical.center, // Ensure text is centered
+                  textAlignVertical: TextAlignVertical.center,
                   decoration: const InputDecoration(
                     hintText: "Message",
                     border: InputBorder.none,
                     hintStyle: TextStyle(color: Colors.black38),
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8), // Adjust inner padding
+                    contentPadding: EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
               ),
@@ -238,7 +305,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   color: Color(0xFF24A1DE),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.send, color: Colors.white, size: 18),
+                child: const Icon(Icons.send, color: Colors.white, size: 20),
               ),
             ),
           ],

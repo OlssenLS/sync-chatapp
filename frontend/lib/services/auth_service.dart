@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
-  static const String baseUrl = "http://10.0.2.2:8080/auth"; // 10.0.2.2 is localhost for Android Emulator
+  static const String baseUrl = "http://10.0.2.2:8080/auth";
 
   static Future<Map<String, dynamic>> register(String email, String username, String password) async {
     final response = await http.post(
@@ -28,6 +29,33 @@ class AuthService {
       }),
     );
 
-    return jsonDecode(response.body);
+    final data = jsonDecode(response.body);
+    if (data.containsKey('token')) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', data['token']);
+      await prefs.setString('user_id', data['user']['id']);
+      await prefs.setString('username', data['user']['username']);
+    }
+    return data;
+  }
+
+  static Future<String?> getUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_id');
+  }
+
+  static Future<String?> getUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('username');
+  }
+
+  static Future<bool> isLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.containsKey('token');
+  }
+
+  static Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
   }
 }

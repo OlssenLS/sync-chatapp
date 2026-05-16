@@ -13,7 +13,7 @@ import (
 var Client *mongo.Client
 
 func ConnectDB() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	uri := os.Getenv("MONGODB_URI")
@@ -24,16 +24,17 @@ func ConnectDB() {
 
 	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
-		log.Fatal("Failed to connect to MongoDB:", err)
+		log.Fatalf("Failed to create MongoDB client: %v", err)
 	}
 
+	// Double check connection with a ping
 	err = client.Ping(ctx, nil)
 	if err != nil {
-		log.Fatal("Failed to ping MongoDB:", err)
+		log.Fatalf("Failed to ping MongoDB after 30s: %v", err)
 	}
 
 	Client = client
-	log.Println("Successfully connected to MongoDB")
+	log.Println("Successfully connected to MongoDB Atlas!")
 }
 
 func GetCollection(collectionName string) *mongo.Collection {

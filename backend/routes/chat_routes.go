@@ -12,5 +12,8 @@ func RegisterChatRoutes(r *gin.Engine, hub *utils.Hub) {
 	chat := r.Group("/chat")
 	{
 		chat.GET("/ws", chatController.HandleWebSocket)
+		chat.GET("/history", chatController.GetHistory)
+		chat.GET("/conversations", chatController.GetConversations)
+		chat.GET("/search", controllers.SearchUsers)
 	}
 }

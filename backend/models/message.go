@@ -6,6 +6,8 @@ import (
 
 	"github.com/OlssenLS/sync-chatapp/backend/db"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type Message struct {
@@ -36,13 +38,20 @@ func SaveMessage(msg *Message) error {
 	return err
 }
 
-func GetMessagesByConversation(convID string) ([]Message, error) {
+func GetChatHistory(senderID, receiverID string, limit int64) ([]Message, error) {
 	collection := db.GetCollection("messages")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{"conversation_id": convID}
-	cursor, err := collection.Find(ctx, filter)
+	filter := bson.M{
+		"$or": []bson.M{
+			{"sender_id": senderID, "receiver_id": receiverID},
+			{"sender_id": receiverID, "receiver_id": senderID},
+		},
+	}
+
+	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: 1}}).SetLimit(limit)
+	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -53,4 +62,77 @@ func GetMessagesByConversation(convID string) ([]Message, error) {
 		return nil, err
 	}
 	return messages, nil
+}
+
+type ConversationPreview struct {
+	OtherUserID   string    `bson:"other_user_id" json:"other_user_id"`
+	OtherUsername string    `bson:"other_username" json:"other_username"`
+	LastMessage   string    `bson:"last_message" json:"last_message"`
+	Timestamp     time.Time `bson:"timestamp" json:"timestamp"`
+}
+
+func GetActiveConversations(userID string) ([]ConversationPreview, error) {
+	collection := db.GetCollection("messages")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"$or": []bson.M{
+				{"sender_id": userID},
+				{"receiver_id": userID},
+			},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "timestamp", Value: -1}}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"$cond": []interface{}{
+					bson.M{"$eq": []interface{}{"$sender_id", userID}},
+					"$receiver_id",
+					"$sender_id",
+				},
+			},
+			"last_message": bson.M{"$first": "$content"},
+			"timestamp":    bson.M{"$first": "$timestamp"},
+		}}},
+		// Explicitly project the Group ID to other_user_id immediately
+		bson.D{{Key: "$project", Value: bson.M{
+			"other_user_id": "$_id",
+			"last_message":  1,
+			"timestamp":     1,
+		}}},
+		// Convert to ObjectID for lookup
+		bson.D{{Key: "$addFields", Value: bson.M{
+			"other_obj_id": bson.M{"$toObjectId": "$other_user_id"},
+		}}},
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from":         "users",
+			"localField":   "other_obj_id",
+			"foreignField": "_id",
+			"as":           "user_info",
+		}}},
+		bson.D{{Key: "$project", Value: bson.M{
+			"other_user_id": 1,
+			"other_username": bson.M{
+				"$ifNull": []interface{}{
+					bson.M{"$arrayElemAt": []interface{}{"$user_info.username", 0}},
+					"Unknown User",
+				},
+			},
+			"last_message": 1,
+			"timestamp":    1,
+		}}},
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var conversations []ConversationPreview
+	if err = cursor.All(ctx, &conversations); err != nil {
+		return nil, err
+	}
+	return conversations, nil
 }

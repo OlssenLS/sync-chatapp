@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"encoding/json"
 	"log"
 	"time"
 
+	"github.com/OlssenLS/sync-chatapp/backend/models"
 	"github.com/gorilla/websocket"
 )
 
@@ -13,6 +15,14 @@ const (
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512
 )
+
+type WSMessage struct {
+	Type       string      `json:"type"`
+	SenderID   string      `json:"sender_id"`
+	ReceiverID string      `json:"receiver_id"`
+	Content    interface{} `json:"content"`
+	Timestamp  time.Time   `json:"timestamp"`
+}
 
 func (c *Client) ReadPump(h *Hub) {
 	defer func() {
@@ -35,9 +45,38 @@ func (c *Client) ReadPump(h *Hub) {
 			}
 			break
 		}
-		// In a real app, parse 'message' (JSON) to find ReceiverID
-		// and use h.SendToUser(receiverID, message)
-		log.Printf("Received message from %s: %s", c.UserID, string(message))
+
+		var wsMsg WSMessage
+		if err := json.Unmarshal(message, &wsMsg); err != nil {
+			log.Printf("error unmarshalling message: %v", err)
+			continue
+		}
+
+		// Use the authenticated UserID from the client object
+		wsMsg.SenderID = c.UserID
+		wsMsg.Timestamp = time.Now()
+
+		if wsMsg.Type == "chat" && wsMsg.ReceiverID != "" {
+			log.Printf("Routing message from %s to %s", c.UserID, wsMsg.ReceiverID)
+
+			// Persist message to MongoDB
+			dbMsg := models.Message{
+				SenderID:   c.UserID,
+				ReceiverID: wsMsg.ReceiverID,
+				Content:    wsMsg.Content.(string),
+				Type:       "text",
+				Timestamp:  wsMsg.Timestamp,
+			}
+			if err := models.SaveMessage(&dbMsg); err != nil {
+				log.Printf("Failed to save message: %v", err)
+			}
+
+			// Deliver to recipient
+			h.SendToUser(wsMsg.ReceiverID, wsMsg)
+
+			// Echo back to sender for confirmation/UI update
+			h.SendToUser(c.UserID, wsMsg)
+		}
 	}
 }
 

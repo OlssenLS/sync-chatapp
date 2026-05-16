@@ -3,7 +3,9 @@ package controllers
 import (
 	"log"
 	"net/http"
+	"strconv"
 
+	"github.com/OlssenLS/sync-chatapp/backend/models"
 	"github.com/OlssenLS/sync-chatapp/backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -49,6 +51,46 @@ func (cc *ChatController) HandleWebSocket(c *gin.Context) {
 	// Start read/write pumps
 	go client.WritePump()
 	go client.ReadPump(cc.Hub)
+}
+
+func (cc *ChatController) GetHistory(c *gin.Context) {
+	senderID := c.Query("sender_id")
+	receiverID := c.Query("receiver_id")
+	limitStr := c.DefaultQuery("limit", "50")
+
+	if senderID == "" || receiverID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sender_id and receiver_id are required"})
+		return
+	}
+
+	limit, err := strconv.ParseInt(limitStr, 10, 64)
+	if err != nil {
+		limit = 50
+	}
+
+	messages, err := models.GetChatHistory(senderID, receiverID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch history"})
+		return
+	}
+
+	c.JSON(http.StatusOK, messages)
+}
+
+func (cc *ChatController) GetConversations(c *gin.Context) {
+	userID := c.Query("user_id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+		return
+	}
+
+	conversations, err := models.GetActiveConversations(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch conversations"})
+		return
+	}
+
+	c.JSON(http.StatusOK, conversations)
 }
 
 // Separate pumps logic for Client (usually in utils or a separate file)
