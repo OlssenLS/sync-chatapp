@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/constants.dart';
 
 class AuthService {
-  static const String baseUrl = "http://10.0.2.2:8080/auth";
+  static const String baseUrl = Constants.authUrl;
 
   static Future<Map<String, dynamic>> register(String email, String username, String password) async {
     final response = await http.post(

@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:developer';
 import 'package:http/http.dart' as http;
+import '../utils/constants.dart';
 
 class ChatService {
-  static const String baseUrl = "http://10.0.2.2:8080/chat";
+  static const String baseUrl = Constants.chatUrl;
 
   static Future<List<dynamic>> getChatHistory(String senderId, String receiverId) async {
     try {

@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import '../utils/constants.dart';
 
 class WebSocketService {
-  static const String wsUrl = "ws://10.0.2.2:8080/chat/ws";
+  static const String wsUrl = Constants.wsChatUrl;
   WebSocketChannel? _channel;
   final _messageController = StreamController<Map<String, dynamic>>.broadcast();
 
