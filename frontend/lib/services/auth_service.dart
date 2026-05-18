@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 
 class AuthService {
-  static const String baseUrl = Constants.authUrl;
+  static String get baseUrl => Constants.authUrl;
 
   static Future<Map<String, dynamic>> register(String email, String username, String password) async {
     final response = await http.post(

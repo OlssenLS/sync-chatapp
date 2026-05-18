@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import '../utils/constants.dart';
 
 class ChatService {
-  static const String baseUrl = Constants.chatUrl;
+  static String get baseUrl => Constants.chatUrl;
 
   static Future<List<dynamic>> getChatHistory(String senderId, String receiverId) async {
     try {

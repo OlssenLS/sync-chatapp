@@ -5,7 +5,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../utils/constants.dart';
 
 class WebSocketService {
-  static const String wsUrl = Constants.wsChatUrl;
+  static String get wsUrl => Constants.wsChatUrl;
   WebSocketChannel? _channel;
   final _messageController = StreamController<Map<String, dynamic>>.broadcast();
 

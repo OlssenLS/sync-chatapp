@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -15,6 +17,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) return 'Email is required';
@@ -70,9 +80,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.redAccent,
+        backgroundColor: Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -83,7 +93,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         content: Text(message),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -92,59 +102,81 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Create Account", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          "CREATE ACCOUNT",
+          style: GoogleFonts.bricolageGrotesque(fontWeight: FontWeight.w800, letterSpacing: 1),
+        ),
       ),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Join SYNC today", style: TextStyle(color: Colors.black54, fontSize: 16)),
-                  const SizedBox(height: 40),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    validator: _validateEmail,
-                    decoration: _inputDecoration("Email", Icons.email_outlined),
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: _usernameController,
-                    validator: _validateUsername,
-                    decoration: _inputDecoration("Username", Icons.person_outline),
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    validator: _validatePassword,
-                    decoration: _inputDecoration("Password", Icons.lock_outline).copyWith(
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.black45),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                      ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    "Join SYNC",
+                    style: GoogleFonts.syne(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
-                  const SizedBox(height: 40),
-                  _isLoading
-                      ? const CircularProgressIndicator()
-                      : ElevatedButton(
-                          onPressed: _handleRegister,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF24A1DE),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 55),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
-                          ),
-                          child: const Text("Register", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ).animate().fadeIn().slideX(begin: -0.2),
+                const SizedBox(height: 8),
+                Text(
+                  "Start your secure messaging journey today",
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.2),
+                const SizedBox(height: 48),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: _validateEmail,
+                  decoration: _inputDecoration("Email", Icons.email_outlined),
+                ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _usernameController,
+                  validator: _validateUsername,
+                  decoration: _inputDecoration("Username", Icons.person_outline),
+                ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  validator: _validatePassword,
+                  decoration: _inputDecoration("Password", Icons.lock_outline).copyWith(
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
+                ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2),
+                const SizedBox(height: 48),
+                _isLoading
+                    ? Center(child: _buildExpressiveLoader())
+                    : ElevatedButton(
+                        onPressed: _handleRegister,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          minimumSize: const Size(double.infinity, 64),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                          elevation: 0,
                         ),
-                ],
-              ),
+                        child: Text(
+                          "REGISTER",
+                          style: GoogleFonts.syne(fontSize: 18, fontWeight: FontWeight.w800),
+                        ),
+                      ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.1),
+              ],
             ),
           ),
         ),
@@ -152,15 +184,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  Widget _buildExpressiveLoader() {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+    ).animate(onPlay: (controller) => controller.repeat())
+     .scale(begin: const Offset(0.5, 0.5), end: const Offset(1, 1), duration: 600.ms, curve: Curves.easeInOutBack)
+     .rotate(duration: 1200.ms);
+  }
+
   InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon, color: const Color(0xFF24A1DE)),
+      prefixIcon: Icon(icon, color: Theme.of(context).colorScheme.primary),
       filled: true,
-      fillColor: const Color(0xFFF0F2F5),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-      errorStyle: const TextStyle(color: Colors.redAccent),
-      contentPadding: const EdgeInsets.symmetric(vertical: 18),
+      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
+      ),
+      errorStyle: TextStyle(color: Theme.of(context).colorScheme.error),
+      contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
     );
   }
 }
