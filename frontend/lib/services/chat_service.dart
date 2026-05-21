@@ -50,4 +50,38 @@ class ChatService {
     }
     return [];
   }
+
+  static Future<bool> markAsRead(String senderId, String receiverId) async {
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/read"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "sender_id": senderId,
+          "receiver_id": receiverId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      log("Error marking as read: $e");
+      return false;
+    }
+  }
+
+  static Future<bool> updateFCMToken(String userId, String token) async {
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/fcm-token"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "user_id": userId,
+          "token": token,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      log("Error updating FCM token: $e");
+      return false;
+    }
+  }
 }

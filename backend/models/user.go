@@ -17,6 +17,7 @@ type User struct {
 	Username     string        `bson:"username" json:"username"`
 	PasswordHash string        `bson:"password_hash" json:"-"`
 	CreatedAt    time.Time     `bson:"created_at" json:"created_at"`
+	FCMToken     string        `bson:"fcm_token" json:"fcm_token"`
 }
 
 func (u *User) HashPassword(password string) error {
@@ -64,4 +65,22 @@ func GetUserByUsernameOrEmail(identifier string) (*User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func UpdateFCMToken(userID string, token string) error {
+	collection := db.GetCollection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objID, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return err
+	}
+
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": objID},
+		bson.M{"$set": bson.M{"fcm_token": token}},
+	)
+	return err
 }

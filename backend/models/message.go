@@ -50,7 +50,7 @@ func GetChatHistory(senderID, receiverID string, limit int64) ([]Message, error)
 		},
 	}
 
-	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: 1}}).SetLimit(limit)
+	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}).SetLimit(limit)
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
@@ -61,6 +61,12 @@ func GetChatHistory(senderID, receiverID string, limit int64) ([]Message, error)
 	if err = cursor.All(ctx, &messages); err != nil {
 		return nil, err
 	}
+
+	// Reverse messages so they are in chronological order for the UI
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
 	return messages, nil
 }
 
@@ -69,6 +75,7 @@ type ConversationPreview struct {
 	OtherUsername string    `bson:"other_username" json:"other_username"`
 	LastMessage   string    `bson:"last_message" json:"last_message"`
 	Timestamp     time.Time `bson:"timestamp" json:"timestamp"`
+	UnreadCount   int       `bson:"unread_count" json:"unread_count"`
 }
 
 func GetActiveConversations(userID string) ([]ConversationPreview, error) {
@@ -94,6 +101,16 @@ func GetActiveConversations(userID string) ([]ConversationPreview, error) {
 			},
 			"last_message": bson.M{"$first": "$content"},
 			"timestamp":    bson.M{"$first": "$timestamp"},
+			"unread_count": bson.M{"$sum": bson.M{
+				"$cond": []interface{}{
+					bson.M{"$and": []interface{}{
+						bson.M{"$eq": []interface{}{"$receiver_id", userID}},
+						bson.M{"$eq": []interface{}{"$is_read", false}},
+					}},
+					1,
+					0,
+				},
+			}},
 		}}},
 		// Explicitly project the Group ID to other_user_id immediately
 		bson.D{{Key: "$project", Value: bson.M{
@@ -121,6 +138,7 @@ func GetActiveConversations(userID string) ([]ConversationPreview, error) {
 			},
 			"last_message": 1,
 			"timestamp":    1,
+			"unread_count": 1,
 		}}},
 	}
 
@@ -135,4 +153,19 @@ func GetActiveConversations(userID string) ([]ConversationPreview, error) {
 		return nil, err
 	}
 	return conversations, nil
+}
+
+func MarkMessagesAsRead(senderID, receiverID string) error {
+	collection := db.GetCollection("messages")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"sender_id":   senderID,
+		"receiver_id": receiverID,
+		"is_read":     false,
+	}
+
+	_, err := collection.UpdateMany(ctx, filter, bson.M{"$set": bson.M{"is_read": true}})
+	return err
 }

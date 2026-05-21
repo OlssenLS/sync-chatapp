@@ -5,7 +5,10 @@ import (
 	"log"
 	"sync"
 
+	"github.com/OlssenLS/sync-chatapp/backend/db"
 	"github.com/gorilla/websocket"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // Client represents a connected user
@@ -69,13 +72,8 @@ func (h *Hub) Run() {
 // SendToUser routes a message to a specific connected user
 func (h *Hub) SendToUser(userID string, message interface{}) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	client, ok := h.Clients[userID]
-	if !ok {
-		log.Printf("User %s not connected", userID)
-		return
-	}
+	h.mu.Unlock()
 
 	payload, err := json.Marshal(message)
 	if err != nil {
@@ -83,9 +81,56 @@ func (h *Hub) SendToUser(userID string, message interface{}) {
 		return
 	}
 
-	select {
-	case client.Send <- payload:
-	default:
-		log.Printf("Send channel full for user %s", userID)
+	if ok {
+		select {
+		case client.Send <- payload:
+		default:
+			log.Printf("Send channel full for user %s", userID)
+		}
+		return
+	}
+
+	// User not connected, send push notification if it's a chat message
+	log.Printf("User %s not connected, attempting push notification", userID)
+
+	wsMsg, isWsMsg := message.(WSMessage)
+	if isWsMsg && wsMsg.Type == "chat" && GlobalNotificationService != nil {
+		// Fetch recipient's FCM token from DB
+		var user struct {
+			FCMToken string `bson:"fcm_token"`
+			Username string `bson:"username"`
+		}
+		collection := db.GetCollection("users")
+		objID, _ := bson.ObjectIDFromHex(userID)
+		err := collection.FindOne(nil, bson.M{"_id": objID}).Decode(&user)
+
+		if err == nil && user.FCMToken != "" {
+			// Also fetch sender's username for the notification title
+			var sender struct {
+				Username string `bson:"username"`
+			}
+			senderID, _ := bson.ObjectIDFromHex(wsMsg.SenderID)
+			db.GetCollection("users").FindOne(nil, bson.M{"_id": senderID}).Decode(&sender)
+
+			title := sender.Username
+			if title == "" {
+				title = "New Message"
+			}
+
+			body := "You have a new message"
+			if content, ok := wsMsg.Content.(string); ok {
+				body = content
+			}
+
+			data := map[string]string{
+				"type":        "chat",
+				"sender_id":   wsMsg.SenderID,
+				"receiver_id": userID,
+			}
+
+			go GlobalNotificationService.SendPushNotification(user.FCMToken, title, body, data)
+		} else if err != nil && err != mongo.ErrNoDocuments {
+			log.Printf("Error fetching user for push: %v", err)
+		}
 	}
 }

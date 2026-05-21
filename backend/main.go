@@ -21,6 +21,9 @@ func main() {
 	// Initialize MongoDB
 	db.ConnectDB()
 
+	// Initialize Notification Service
+	utils.InitNotificationService()
+
 	// Initialize WebSocket Hub
 	hub := utils.NewHub()
 	go hub.Run()

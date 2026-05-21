@@ -40,6 +40,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     final history = await ChatService.getChatHistory(widget.myId, widget.userId);
     if (mounted) {
+      // Mark as read when loading history
+      ChatService.markAsRead(widget.userId, widget.myId);
+      
       _messages.clear();
       for (var msg in history) {
         final content = msg['content']?.toString() ?? "";
@@ -86,6 +89,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         if (content.isEmpty) return;
 
         final isMe = data['sender_id'] == widget.myId;
+        
+        // Mark as read if receiving message from other user while in this screen
+        if (!isMe) {
+          ChatService.markAsRead(widget.userId, widget.myId);
+        }
+
         final newMessage = ChatMessage(
           content: content,
           isMe: isMe,

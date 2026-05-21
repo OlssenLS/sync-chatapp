@@ -2,6 +2,7 @@ import 'dart:async';
 import 'services/chat_service.dart';
 import 'services/websocket_service.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'chat_detail_screen.dart';
 import 'main.dart'; // To access themeController
 import 'dart:ui';
@@ -43,10 +44,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _myId = id;
       });
       _wsService.connect(id);
+      NotificationService.registerToken(id);
       _fetchConversations();
 
       _wsSubscription = _wsService.messages.listen((data) {
-        if (data['type'] == 'chat') {
+        if (data['type'] == 'chat' || data['type'] == 'read') {
           _fetchConversations();
         }
       });

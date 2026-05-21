@@ -15,5 +15,7 @@ func RegisterChatRoutes(r *gin.Engine, hub *utils.Hub) {
 		chat.GET("/history", chatController.GetHistory)
 		chat.GET("/conversations", chatController.GetConversations)
 		chat.GET("/search", controllers.SearchUsers)
+		chat.POST("/read", chatController.MarkAsRead)
+		chat.POST("/fcm-token", chatController.UpdateFCMToken)
 	}
 }

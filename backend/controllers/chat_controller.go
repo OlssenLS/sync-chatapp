@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/OlssenLS/sync-chatapp/backend/models"
 	"github.com/OlssenLS/sync-chatapp/backend/utils"
@@ -91,6 +92,52 @@ func (cc *ChatController) GetConversations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, conversations)
+}
+
+func (cc *ChatController) MarkAsRead(c *gin.Context) {
+	var body struct {
+		SenderID   string `json:"sender_id"`
+		ReceiverID string `json:"receiver_id"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if err := models.MarkMessagesAsRead(body.SenderID, body.ReceiverID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark as read"})
+		return
+	}
+
+	// Notify the sender that their messages were read (via WS if online)
+	cc.Hub.SendToUser(body.SenderID, utils.WSMessage{
+		Type:       "read",
+		SenderID:   body.ReceiverID, // User who read the messages
+		ReceiverID: body.SenderID,
+		Timestamp:  time.Now(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func (cc *ChatController) UpdateFCMToken(c *gin.Context) {
+	var body struct {
+		UserID string `json:"user_id"`
+		Token  string `json:"token"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if err := models.UpdateFCMToken(body.UserID, body.Token); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
 // Separate pumps logic for Client (usually in utils or a separate file)

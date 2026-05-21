@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 
 class Constants {
-  static const String computerIp = "192.168.100.13";
+  static const String computerIp = "192.168.8.3";
   static const String emulatorIp = "10.0.2.2";
   static const String port = "8080";
 
