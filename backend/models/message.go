@@ -28,6 +28,36 @@ type Conversation struct {
 	UpdatedAt    time.Time     `bson:"updated_at" json:"updated_at"`
 }
 
+type Priority struct {
+	ID           bson.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID       string        `bson:"user_id" json:"user_id"`
+	TargetUserID string        `bson:"target_user_id" json:"target_user_id"`
+	Level        int           `bson:"level" json:"level"` // 0: Normal, 1: Starred, 2: Priority, 3: Emergency
+	UpdatedAt    time.Time     `bson:"updated_at" json:"updated_at"`
+}
+
+func SetPriority(userID, targetUserID string, level int) error {
+	collection := db.GetCollection("priorities")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"user_id":        userID,
+		"target_user_id": targetUserID,
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"level":      level,
+			"updated_at": time.Now(),
+		},
+	}
+
+	opts := options.UpdateOne().SetUpsert(true)
+	_, err := collection.UpdateOne(ctx, filter, update, opts)
+	return err
+}
+
 func SaveMessage(msg *Message) error {
 	collection := db.GetCollection("messages")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -76,6 +106,7 @@ type ConversationPreview struct {
 	LastMessage   string    `bson:"last_message" json:"last_message"`
 	Timestamp     time.Time `bson:"timestamp" json:"timestamp"`
 	UnreadCount   int       `bson:"unread_count" json:"unread_count"`
+	PriorityLevel int       `bson:"priority_level" json:"priority_level"`
 }
 
 func GetActiveConversations(userID string) ([]ConversationPreview, error) {
@@ -119,9 +150,31 @@ func GetActiveConversations(userID string) ([]ConversationPreview, error) {
 			"timestamp":     1,
 			"unread_count":  1,
 		}}},
-		// Convert to ObjectID for lookup
+		// Lookup priority for this user and other_user_id
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from": "priorities",
+			"let":  bson.M{"other_id": "$other_user_id"},
+			"pipeline": mongo.Pipeline{
+				bson.D{{Key: "$match", Value: bson.M{
+					"$expr": bson.M{
+						"$and": []bson.M{
+							{"$eq": []interface{}{"$user_id", userID}},
+							{"$eq": []interface{}{"$target_user_id", "$$other_id"}},
+						},
+					},
+				}}},
+			},
+			"as": "priority_info",
+		}}},
+		// Convert to ObjectID for lookup user info
 		bson.D{{Key: "$addFields", Value: bson.M{
 			"other_obj_id": bson.M{"$toObjectId": "$other_user_id"},
+			"priority_level": bson.M{
+				"$ifNull": []interface{}{
+					bson.M{"$arrayElemAt": []interface{}{"$priority_info.level", 0}},
+					0,
+				},
+			},
 		}}},
 		bson.D{{Key: "$lookup", Value: bson.M{
 			"from":         "users",
@@ -137,9 +190,10 @@ func GetActiveConversations(userID string) ([]ConversationPreview, error) {
 					"Unknown User",
 				},
 			},
-			"last_message": 1,
-			"timestamp":    1,
-			"unread_count": 1,
+			"last_message":   1,
+			"timestamp":      1,
+			"unread_count":   1,
+			"priority_level": 1,
 		}}},
 	}
 

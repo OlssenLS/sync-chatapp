@@ -99,4 +99,22 @@ class ChatService {
       return false;
     }
   }
+
+  static Future<bool> setPriority(String userId, String targetUserId, int level) async {
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/priority"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "user_id": userId,
+          "target_user_id": targetUserId,
+          "level": level,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      log("Error setting priority: $e");
+      return false;
+    }
+  }
 }

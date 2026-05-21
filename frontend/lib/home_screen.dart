@@ -140,9 +140,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildChatsPage() {
+    final shelfContacts = _conversations
+        .where((c) => (c['priority_level'] ?? 0) >= 2)
+        .toList();
+
     return Column(
       children: [
         _buildHeader("SYNC"),
+        if (shelfContacts.isNotEmpty && !_isSearching) ...[
+          const SizedBox(height: 10),
+          _buildPriorityShelf(shelfContacts),
+        ],
         const SizedBox(height: 20),
         _buildTabSection(),
         const SizedBox(height: 10),
@@ -154,6 +162,100 @@ class _HomeScreenState extends State<HomeScreen> {
               : _buildChatList(),
         ),
       ],
+    );
+  }
+
+  Widget _buildPriorityShelf(List<dynamic> contacts) {
+    return Container(
+      height: 100,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        scrollDirection: Axis.horizontal,
+        itemCount: contacts.length,
+        itemBuilder: (context, index) {
+          final conv = contacts[index];
+          final level = conv['priority_level'] ?? 0;
+          final username = conv['other_username'] ?? "User";
+          final initial = username.isNotEmpty ? username[0].toUpperCase() : "?";
+
+          return GestureDetector(
+            onTap: () => _navigateToChat(conv),
+            child: Container(
+              margin: const EdgeInsets.only(right: 20),
+              child: Column(
+                children: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (level == 3) // Emergency pulsing ring
+                        Container(
+                          width: 68,
+                          height: 68,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5), width: 2),
+                          ),
+                        ).animate(onPlay: (c) => c.repeat())
+                         .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 1.seconds)
+                         .fadeOut(),
+                      
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: level == 3 
+                              ? Colors.redAccent 
+                              : Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            if (level >= 2)
+                              BoxShadow(
+                                color: (level == 3 ? Colors.redAccent : Theme.of(context).colorScheme.primary)
+                                    .withValues(alpha: 0.3),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                              )
+                          ],
+                        ),
+                        child: _buildExpressiveAvatar(
+                          initial, 
+                          level == 3 ? Colors.redAccent : Theme.of(context).colorScheme.primary,
+                          size: 50,
+                        ),
+                      ),
+                      if (conv['unread_count'] != null && conv['unread_count'] > 0)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              conv['unread_count'].toString(),
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ).animate().shake(),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    username,
+                    style: GoogleFonts.syne(fontSize: 12, fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ).animate().fadeIn(delay: (index * 100).ms).scale(delay: (index * 100).ms);
+        },
+      ),
     );
   }
 
@@ -578,11 +680,60 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // Sorting & Filtering Logic
+    List<dynamic> filteredConversations = List.from(_conversations);
+    
+    if (_tabIndex == 1) {
+      // Important tab: Level > 0
+      filteredConversations = filteredConversations
+          .where((c) => (c['priority_level'] ?? 0) > 0)
+          .toList();
+    }
+
+    // Custom Sort
+    filteredConversations.sort((a, b) {
+      int pA = a['priority_level'] ?? 0;
+      int pB = b['priority_level'] ?? 0;
+      int uA = a['unread_count'] ?? 0;
+      int uB = b['unread_count'] ?? 0;
+
+      // 1. Emergency (3) with unread messages always at top
+      if (pA == 3 && uA > 0 && !(pB == 3 && uB > 0)) return -1;
+      if (pB == 3 && uB > 0 && !(pA == 3 && uA > 0)) return 1;
+
+      // 2. Priority (2) with unread messages next
+      if (pA == 2 && uA > 0 && !(pB >= 2 && uB > 0)) return -1;
+      if (pB == 2 && uB > 0 && !(pA >= 2 && uA > 0)) return 1;
+
+      // 3. Otherwise, chronological
+      DateTime tA = DateTime.parse(a['timestamp'].toString());
+      DateTime tB = DateTime.parse(b['timestamp'].toString());
+      return tB.compareTo(tA);
+    });
+
+    if (filteredConversations.isEmpty && _tabIndex == 1) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.star_outline_rounded, size: 80, color: Theme.of(context).colorScheme.primaryContainer),
+            const SizedBox(height: 24),
+            Text(
+              "No important chats",
+              style: GoogleFonts.syne(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text("Long press a chat to mark as important!"),
+          ],
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 120, top: 10),
-      itemCount: _conversations.length,
+      itemCount: filteredConversations.length,
       itemBuilder: (context, index) {
-        final conv = _conversations[index];
+        final conv = filteredConversations[index];
         return _buildChatTile(conv).animate().fadeIn(delay: (index * 50).ms).slideX(begin: 0.1);
       },
     );
@@ -592,17 +743,58 @@ class _HomeScreenState extends State<HomeScreen> {
     final username = conv['other_username']?.toString() ?? "Unknown";
     final firstLetter = username.isNotEmpty ? username[0].toUpperCase() : "?";
     final userId = conv['other_user_id'];
+    final level = conv['priority_level'] ?? 0;
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      leading: _buildExpressiveAvatar(firstLetter, Theme.of(context).colorScheme.primary),
-      title: Text(
-        username,
-        style: GoogleFonts.bricolageGrotesque(
-          fontWeight: FontWeight.w700, 
-          fontSize: 18,
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
+      leading: Stack(
+        children: [
+          _buildExpressiveAvatar(
+            firstLetter, 
+            level == 3 ? Colors.redAccent : (level == 2 ? Colors.blueAccent : Theme.of(context).colorScheme.primary),
+          ),
+          if (level > 0)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: level == 3 ? Colors.redAccent : (level == 2 ? Colors.blueAccent : Colors.amber),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2),
+                ),
+                child: Icon(
+                  level == 3 ? Icons.priority_high_rounded : (level == 2 ? Icons.bolt_rounded : Icons.star_rounded),
+                  size: 10,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+        ],
+      ),
+      title: Row(
+        children: [
+          Text(
+            username,
+            style: GoogleFonts.bricolageGrotesque(
+              fontWeight: FontWeight.w700, 
+              fontSize: 18,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          if (level == 3) ...[
+             const SizedBox(width: 8),
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+               decoration: BoxDecoration(
+                 color: Colors.redAccent.withValues(alpha: 0.1),
+                 borderRadius: BorderRadius.circular(4),
+               ),
+               child: Text("URGENT", style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w800)),
+             ),
+          ],
+        ],
       ),
       subtitle: Text(
         conv['last_message']?.toString() ?? "",
@@ -630,11 +822,11 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary, 
+                color: level == 3 ? Colors.redAccent : Theme.of(context).colorScheme.primary, 
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                    color: (level == 3 ? Colors.redAccent : Theme.of(context).colorScheme.primary).withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   )
@@ -652,56 +844,113 @@ class _HomeScreenState extends State<HomeScreen> {
              .scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1), duration: 1.seconds),
         ],
       ),
-      onTap: () {
-        Navigator.push(
-          context,
-          PageRouteBuilder(
-            transitionDuration: 400.ms,
-            reverseTransitionDuration: 300.ms,
-            pageBuilder: (context, animation, secondaryAnimation) => ChatDetailScreen(
-              userName: username,
-              userId: userId,
-              myId: _myId,
-              wsService: _wsService,
-            ),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              final slideAnimation = Tween<Offset>(
-                begin: const Offset(0.1, 0),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOutCubic,
-              ));
+      onLongPress: () => _showPriorityPicker(userId, username, level),
+      onTap: () => _navigateToChat(conv),
+    );
+  }
 
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: slideAnimation,
-                  child: child,
-                ),
-              );
-            },
-          ),
-        ).then((_) => _fetchConversations());
+  void _navigateToChat(dynamic conv) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: 400.ms,
+        reverseTransitionDuration: 300.ms,
+        pageBuilder: (context, animation, secondaryAnimation) => ChatDetailScreen(
+          userName: conv['other_username'],
+          userId: conv['other_user_id'],
+          myId: _myId,
+          wsService: _wsService,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final slideAnimation = Tween<Offset>(
+            begin: const Offset(0.1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          ));
+
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: slideAnimation,
+              child: child,
+            ),
+          );
+        },
+      ),
+    ).then((_) => _fetchConversations());
+  }
+
+  void _showPriorityPicker(String targetId, String username, int currentLevel) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Set Priority for $username",
+              style: GoogleFonts.syne(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text("Priority contacts are pinned to your 'Sync Shelf' and won't get drowned."),
+            const SizedBox(height: 24),
+            _priorityOption(0, "Normal", "Standard chat behavior", Icons.chat_bubble_outline_rounded, Colors.grey, targetId),
+            _priorityOption(1, "Starred", "Shows in Important tab", Icons.star_rounded, Colors.amber, targetId),
+            _priorityOption(2, "Priority", "Sync Shelf + Blue Glow", Icons.bolt_rounded, Colors.blueAccent, targetId),
+            _priorityOption(3, "Emergency", "Sync Shelf + Top Float + Pulse", Icons.priority_high_rounded, Colors.redAccent, targetId),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _priorityOption(int level, String title, String desc, IconData icon, Color color, String targetId) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(desc, style: const TextStyle(fontSize: 12)),
+      onTap: () async {
+        Navigator.pop(context);
+        final success = await ChatService.setPriority(_myId, targetId, level);
+        if (success) {
+          _fetchConversations();
+        }
       },
     );
   }
 
-  Widget _buildExpressiveAvatar(String label, Color color) {
+  Widget _buildExpressiveAvatar(String label, Color color, {double size = 56}) {
     return Container(
-      width: 56,
-      height: 56,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(18).copyWith(
-          topLeft: const Radius.circular(28),
-          bottomRight: const Radius.circular(28),
+        borderRadius: BorderRadius.circular(size * 18 / 56).copyWith(
+          topLeft: Radius.circular(size * 28 / 56),
+          bottomRight: Radius.circular(size * 28 / 56),
         ),
       ),
       alignment: Alignment.center,
       child: Text(
         label,
-        style: GoogleFonts.syne(color: color, fontWeight: FontWeight.w800, fontSize: 20),
+        style: GoogleFonts.syne(color: color, fontWeight: FontWeight.w800, fontSize: size * 20 / 56),
       ),
     );
   }

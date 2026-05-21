@@ -18,5 +18,6 @@ func RegisterChatRoutes(r *gin.Engine, hub *utils.Hub) {
 		chat.GET("/users", controllers.GetAllUsers)
 		chat.POST("/read", chatController.MarkAsRead)
 		chat.POST("/fcm-token", chatController.UpdateFCMToken)
+		chat.POST("/priority", chatController.SetPriority)
 	}
 }

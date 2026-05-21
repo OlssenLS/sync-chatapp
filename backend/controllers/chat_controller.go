@@ -140,5 +140,25 @@ func (cc *ChatController) UpdateFCMToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
+func (cc *ChatController) SetPriority(c *gin.Context) {
+	var body struct {
+		UserID       string `json:"user_id"`
+		TargetUserID string `json:"target_user_id"`
+		Level        int    `json:"level"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if err := models.SetPriority(body.UserID, body.TargetUserID, body.Level); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set priority"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
 // Separate pumps logic for Client (usually in utils or a separate file)
 // For simplicity, we add helper methods here or in utils

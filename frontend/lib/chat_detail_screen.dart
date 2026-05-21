@@ -213,10 +213,63 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ],
       ),
       actions: [
-        IconButton(icon: const Icon(Icons.videocam_rounded), onPressed: () {}),
-        IconButton(icon: const Icon(Icons.call_rounded), onPressed: () {}),
+        IconButton(
+          icon: const Icon(Icons.more_vert_rounded), 
+          onPressed: () => _showPriorityPicker(widget.userId, widget.userName),
+        ),
         const SizedBox(width: 8),
       ],
+    );
+  }
+
+  void _showPriorityPicker(String targetId, String username) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Set Priority for $username",
+              style: GoogleFonts.syne(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text("Priority contacts are pinned to your 'Sync Shelf' and won't get drowned."),
+            const SizedBox(height: 24),
+            _priorityOption(0, "Normal", "Standard chat behavior", Icons.chat_bubble_outline_rounded, Colors.grey, targetId),
+            _priorityOption(1, "Starred", "Shows in Important tab", Icons.star_rounded, Colors.amber, targetId),
+            _priorityOption(2, "Priority", "Sync Shelf + Blue Glow", Icons.bolt_rounded, Colors.blueAccent, targetId),
+            _priorityOption(3, "Emergency", "Sync Shelf + Top Float + Pulse", Icons.priority_high_rounded, Colors.redAccent, targetId),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _priorityOption(int level, String title, String desc, IconData icon, Color color, String targetId) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(desc, style: const TextStyle(fontSize: 12)),
+      onTap: () async {
+        Navigator.pop(context);
+        await ChatService.setPriority(widget.myId, targetId, level);
+      },
     );
   }
 
