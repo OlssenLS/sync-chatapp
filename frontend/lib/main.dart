@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -52,15 +54,31 @@ class SyncChatApp extends StatefulWidget {
   State<SyncChatApp> createState() => _SyncChatAppState();
 }
 
-class _SyncChatAppState extends State<SyncChatApp> {
+class _SyncChatAppState extends State<SyncChatApp> with WidgetsBindingObserver {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final WebSocketService _wsService = WebSocketService();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     themeController.addListener(_onThemeChanged);
     _setupNotificationHandling();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      log("App Resumed - Checking WebSocket");
+      _ensureWebSocketConnected();
+    }
+  }
+
+  Future<void> _ensureWebSocketConnected() async {
+    final myId = await AuthService.getUserId() ?? "";
+    if (myId.isNotEmpty) {
+      _wsService.connect(myId);
+    }
   }
 
   void _setupNotificationHandling() {
@@ -98,6 +116,7 @@ class _SyncChatAppState extends State<SyncChatApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     themeController.removeListener(_onThemeChanged);
     _wsService.disconnect();
     super.dispose();

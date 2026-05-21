@@ -112,11 +112,12 @@ func GetActiveConversations(userID string) ([]ConversationPreview, error) {
 				},
 			}},
 		}}},
-		// Explicitly project the Group ID to other_user_id immediately
+		// Explicitly project fields to the next stage
 		bson.D{{Key: "$project", Value: bson.M{
 			"other_user_id": "$_id",
 			"last_message":  1,
 			"timestamp":     1,
+			"unread_count":  1,
 		}}},
 		// Convert to ObjectID for lookup
 		bson.D{{Key: "$addFields", Value: bson.M{

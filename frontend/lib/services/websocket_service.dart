@@ -11,27 +11,41 @@ class WebSocketService {
 
   Stream<Map<String, dynamic>> get messages => _messageController.stream;
 
+  bool get isConnected => _channel != null;
+
   void connect(String userId) {
-    if (_channel != null) return;
+    if (_channel != null) {
+      log("WebSocket already connected, skipping.");
+      return;
+    }
 
-    _channel = WebSocketChannel.connect(
-      Uri.parse("$wsUrl?user_id=$userId"),
-    );
+    log("Connecting WebSocket for user: $userId");
+    try {
+      _channel = WebSocketChannel.connect(
+        Uri.parse("$wsUrl?user_id=$userId"),
+      );
 
-    _channel!.stream.listen(
-      (message) {
-        final data = jsonDecode(message);
-        _messageController.add(data);
-      },
-      onError: (error) {
-        log("WebSocket Error: $error");
-        reconnect(userId);
-      },
-      onDone: () {
-        log("WebSocket Closed");
-        _channel = null;
-      },
-    );
+      _channel!.stream.listen(
+        (message) {
+          final data = jsonDecode(message);
+          _messageController.add(data);
+        },
+        onError: (error) {
+          log("WebSocket Error: $error");
+          _channel = null;
+          reconnect(userId);
+        },
+        onDone: () {
+          log("WebSocket Closed");
+          _channel = null;
+          reconnect(userId);
+        },
+      );
+    } catch (e) {
+      log("WebSocket Connection Exception: $e");
+      _channel = null;
+      reconnect(userId);
+    }
   }
 
   void sendMessage(String receiverId, String content) {
