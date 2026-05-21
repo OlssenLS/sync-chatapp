@@ -45,3 +45,24 @@ func SearchUsers(c *gin.Context) {
 
 	c.JSON(http.StatusOK, users)
 }
+
+func GetAllUsers(c *gin.Context) {
+	collection := db.GetCollection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var users []models.User
+	if err = cursor.All(ctx, &users); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode users"})
+		return
+	}
+
+	c.JSON(http.StatusOK, users)
+}

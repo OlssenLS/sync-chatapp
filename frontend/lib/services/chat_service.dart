@@ -36,6 +36,21 @@ class ChatService {
     return [];
   }
 
+  static Future<List<dynamic>> getAllUsers() async {
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/users"),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (e) {
+      log("Error fetching all users: $e");
+    }
+    return [];
+  }
+
   static Future<List<dynamic>> getActiveConversations(String userId) async {
     try {
       final response = await http.get(
