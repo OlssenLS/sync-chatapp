@@ -186,9 +186,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 32),
                 _buildSettingsSection("Preferences", [
                   _settingsItem(
-                    Icons.palette_rounded, 
-                    "Appearance", 
-                    "Change app theme",
+                    themeController.themeMode == ThemeMode.dark 
+                      ? Icons.dark_mode_rounded 
+                      : Icons.light_mode_rounded, 
+                    "Dark Mode", 
+                    "Switch between light and dark themes",
                     trailing: _buildThemeToggleSmall(),
                   ),
                   _settingsItem(
